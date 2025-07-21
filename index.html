@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stick Figure Fight</title>
+    <style>
+        /* Dark Mode Default */
+        :root {
+            --p1-color: #e63946; --p2-color: #457b9d; --p1-special-color: #ffc857;
+            --p2-special-color: #48cae4; --bg-color: #1d3557; --ui-bg-color: #457b9d;
+            --border-color: #f1faee; --danger-color: #d00000; --upgrade-color: #2a9d8f;
+            --disabled-color: #6c757d; --text-color: #f1faee; --setup-bg: #283e5a;
+        }
+        body.light-mode {
+            --p1-color: #e63946; --p2-color: #1d3557; --p1-special-color: #ffc857;
+            --p2-special-color: #48cae4; --bg-color: #f1faee; --ui-bg-color: #a8dadc;
+            --border-color: #1d3557; --danger-color: #d00000; --upgrade-color: #2a9d8f;
+            --disabled-color: #ced4da; --text-color: #1d3557; --setup-bg: #fff;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; overflow: hidden; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: var(--bg-color); color: var(--text-color); padding: 20px; transition: background-color 0.3s, color 0.3s; }
+        h1, h2, h3, h4 { margin: 0.5em 0; text-align: center; }
+        button, input, select { padding: 8px; border-radius: 5px; border: 1px solid var(--border-color); width: 100%; font-size: 0.9em; margin-bottom: 8px; background-color: var(--setup-bg); color: var(--text-color); }
+        button { background-color: var(--p2-color); color: white; font-weight: bold; cursor: pointer; transition: background-color 0.2s; margin-top: auto; padding: 10px; }
+        button:hover:not(:disabled) { opacity: 0.9; }
+        button:disabled { background-color: var(--disabled-color); cursor: not-allowed; }
+        
+        #app-container { display: flex; flex-direction: column; width: 100%; max-width: 1024px; height: 100%; max-height: 90vh; }
+        .screen { display: none; width: 100%; height: 100%; }
+        .screen.active { display: flex; }
+
+        /* Setup Screen */
+        #setup-screen { flex-direction: column; padding: 20px; background-color: var(--setup-bg); border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 3px solid var(--border-color); }
+        #setup-screen h1 { flex-shrink: 0; }
+        .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; width: 100%; overflow-y: auto; flex-grow: 1; }
+        .setup-column { padding: 15px; border: 2px solid var(--ui-bg-color); border-radius: 10px; display: flex; flex-direction: column; }
+        .creator-controls { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; margin-top: 10px; }
+        .creator-controls label { font-weight: bold; font-size: 0.9em; }
+        .seed-container { display: flex; gap: 5px; } #random-seed-btn { font-size: 0.8em; padding: 5px; width: auto; margin: 0; }
+        .avatar-preview, #p1-select-preview, #p2-select-preview { width: 80px; height: 80px; border: 2px solid var(--border-color); border-radius: 10px; margin: 10px auto; background-color: #e9ecef; }
+        #save-fighter-btn { background-color: var(--upgrade-color); } #delete-fighter-btn { background-color: var(--danger-color); }
+        #start-game-btn { background-color: var(--p1-color); font-size: 1.2em; padding: 12px; border-radius: 10px; flex-shrink: 0; margin-top: 15px; }
+        .instructions { border-top: 2px solid var(--ui-bg-color); margin-top: 15px; padding-top: 10px; } .controls-grid { display: grid; grid-template-columns: 1fr; gap: 5px; } .controls-grid ul { margin: 0; padding-left: 20px; font-size: 0.85em; }
+
+        /* Game Screen */
+        #game-container { position: relative; height: 576px; }
+        #game-container canvas { position: absolute; top: 0; left: 0; z-index: 1; width: 100%; height: 100%;}
+        #ui-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+        #game-message-container { position: absolute; inset: 0; z-index: 3; }
+        
+        .health-container { position: absolute; top: 20px; display: flex; align-items: center; border: 4px solid var(--border-color); background-color: var(--ui-bg-color); height: 30px; }
+        #p1-health-container { width: 45%; left: 20px; justify-content: flex-start; }
+        #p2-health-container { width: 45%; right: 20px; flex-direction: row-reverse; justify-content: flex-start; }
+        .health-bar { width: 100%; height: 100%; background-color: rgba(0,0,0,0.25); }
+        .health-bar-inner { height: 100%; width: 100%; transition: width 0.2s linear; }
+        #p1-health-bar { background-color: var(--p1-color); }
+        #p2-health-bar { background-color: var(--p2-color); }
+        .special-bar { position: absolute; height: 15px; background-color: rgba(0,0,0,0.2); border: 2px solid var(--border-color); width: 40%; top: 60px; }
+        #p1-special-container { left: 20px; } #p2-special-container { right: 20px; } .special-bar-inner { height: 100%; width: 0%; transition: width 0.2s linear; }
+        #p1-special-bar { background-color: var(--p1-special-color); } #p2-special-bar { background-color: var(--p2-special-color); }
+        #p1-special-bar.full, #p2-special-bar.full { box-shadow: 0 0 15px 5px currentColor; }
+        #timer { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 100px; height: 50px; background-color: var(--border-color); color: var(--bg-color); font-size: 30px; display: flex; justify-content: center; align-items: center; border-radius: 10px; }
+        #game-message-container { display: none; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; text-align: center; flex-direction: column; }
+        #game-message { color: white; font-size: 50px; font-weight: bold; text-shadow: 2px 2px 5px black; }
+        #rematch-prompt { margin-top: 20px; } #rematch-prompt button { width: 150px; display: inline-block; margin: 0 10px; }
+
+        /* Upgrade Screen */
+        #upgrade-screen { flex-direction: column; align-items: center; padding: 20px; background-color: var(--setup-bg); border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 3px solid var(--border-color); }
+        .upgrade-container { display: flex; width: 100%; justify-content: space-around; }
+        .upgrade-player-panel { border: 2px solid var(--ui-bg-color); padding: 15px; border-radius: 10px; flex: 1; margin: 0 10px; }
+        .upgrade-player-panel img { width: 80px; height: 80px; border-radius: 10px; display: block; margin: 0 auto 10px auto; }
+        .stat-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .upgrade-bar { display: flex; border: 1px solid #ccc; border-radius: 5px; overflow: hidden; height: 20px; width: 100%; margin: 0 10px;}
+        .upgrade-tick { flex: 1; background-color: var(--disabled-color); border-right: 1px solid white; } .upgrade-tick.filled { background-color: var(--upgrade-color); }
+        .stat-line button { width: 30px; height: 30px; padding: 0; font-size: 1.2em; flex-shrink: 0; margin-left: 10px; margin-bottom: 0; }
+        #start-rematch-btn { width: 60%; max-width: 400px; margin: 20px auto 0 auto; display: block; background-color: var(--p1-color); font-size: 1.2em; padding: 15px; }
+        
+        /* Theme Toggle Switch */
+        .theme-switch-wrapper { display: flex; align-items: center; margin-top: 8px; }
+        .theme-switch { position: relative; display: inline-block; width: 50px; height: 24px; margin-left: 10px;}
+        .theme-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--p1-color); }
+        input:checked + .slider:before { transform: translateX(26px); }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="setup-screen" class="screen">
+            <h1>Stick Figure Fight</h1>
+            <div class="setup-grid">
+                <div class="setup-column">
+                    <h3>1. Create Fighter</h3>
+                    <img id="avatar-preview" alt="Avatar Preview">
+                    <input type="text" id="fighter-name" placeholder="Fighter Name">
+                    <div class="creator-controls">
+                        <label for="seed">Seed</label>
+                        <div class="seed-container">
+                        <input type="text" id="seed" placeholder="Any name or word">
+                        <button id="random-seed-btn" title="Generate Random Seed">🎲</button>
+                        </div>
+                        <label for="face">Face</label>
+                        <select id="face"><option value="variant01">Round</option><option value="variant02">Square</option></select>
+                        <label for="nose">Nose</label>
+                        <select id="nose"><option value="variant01">Small</option><option value="variant02">Large</option><option value="variant03">Pointy</option></select>
+                        <label for="mouth">Mouth</label>
+                        <select id="mouth"><option value="variant01">Smile</option><option value="variant02">Frown</option><option value="variant03">O-shape</option></select>
+                    </div>
+                    <button id="save-fighter-btn">Save Fighter</button>
+                </div>
+                <div class="setup-column">
+                    <h3>2. Select Fighters</h3>
+                    <div>
+                        <label for="p1-select">Player 1</label>
+                        <select id="p1-select"></select>
+                        <img id="p1-select-preview" alt="Player 1 Preview">
+                        <button id="delete-fighter-btn">Delete Selected (P1)</button>
+                    </div>
+                    <hr style="width: 100%; border-color: var(--ui-bg-color);">
+                    <div>
+                        <label for="p2-select">Player 2 / AI</label>
+                        <select id="p2-select"></select>
+                        <img id="p2-select-preview" alt="Player 2 Preview">
+                    </div>
+                </div>
+                <div class="setup-column">
+                    <h3>3. Game Mode & Rules</h3>
+                    <label for="game-mode">Opponent</label>
+                    <select id="game-mode">
+                        <option value="ai">Human vs. AI</option>
+                        <option value="human">Human vs. Human</option>
+                    </select>
+                     <div class="creator-controls" style="margin-top: 20px;">
+                        <label for="theme-toggle">Theme</label>
+                        <div class="theme-switch-wrapper">
+                            <label class="theme-switch" for="theme-toggle">
+                                <input type="checkbox" id="theme-toggle" />
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="instructions">
+                        <h4>How to Fight</h4>
+                        <div class="controls-grid">
+                            <div><strong>Player 1</strong><ul><li>Move: A / D</li><li>Jump: W</li><li>Punch: F</li><li>Kick: G</li><li>Special: R</li></ul></div>
+                            <div><strong>Player 2 (Human)</strong><ul><li>Move: Arrow Keys</li><li>Jump: Arrow Up</li><li>Punch: L</li><li>Kick: ;</li><li>Special: [</li></ul></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button id="start-game-btn">Start Fight</button>
+        </div>
+        <div id="game-container" class="screen">
+            <canvas></canvas>
+            <div id="ui-overlay">
+                <div id="p1-health-container" class="health-container">
+                    <div class="health-bar">
+                        <div id="p1-health-bar" class="health-bar-inner"></div>
+                    </div>
+                </div>
+                <div id="p1-special-container" class="special-bar"><div id="p1-special-bar" class="special-bar-inner"></div></div>
+                <div id="p2-health-container" class="health-container">
+                    <div class="health-bar">
+                        <div id="p2-health-bar" class="health-bar-inner"></div>
+                    </div>
+                </div>
+                <div id="p2-special-container" class="special-bar"><div id="p2-special-bar" class="special-bar-inner"></div></div>
+                <div id="timer">60</div>
+            </div>
+            <div id="game-message-container">
+                <h2 id="game-message"></h2>
+                <div id="rematch-prompt"><h3 style="color:white">Rematch?</h3><button id="rematch-yes-btn">Yes (Upgrade)</button><button id="rematch-no-btn">No (Menu)</button></div>
+            </div>
+        </div>
+        <div id="upgrade-screen" class="screen">
+            <div class="setup-column" style="width:100%; max-width: 800px; height: 100%;">
+                <h1>Upgrade Fighters</h1>
+                <div class="upgrade-container" style="flex-grow: 1;">
+                    <div id="upgrade-p1" class="upgrade-player-panel"></div>
+                    <div id="upgrade-p2" class="upgrade-player-panel"></div>
+                </div>
+                <button id="start-rematch-btn">Start Rematch</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const BASE_JUMP = -20, BASE_STRENGTH = 5, BASE_REACH = 100;
+    let player, enemy, isAiOpponent, animationId, timerId;
+    const keys = { a: { pressed: false }, d: { pressed: false }, ArrowLeft: { pressed: false }, ArrowRight: { pressed: false } };
+    const canvas = document.querySelector('canvas');
+    const c = canvas.getContext('2d');
+    canvas.width = 1024; canvas.height = 576;
+    let p1HealthBar, p2HealthBar, p1SpecialBar, p2SpecialBar;
+    
+    function getFighters() { let fighters = JSON.parse(localStorage.getItem('fighters')) || []; return fighters.map(f => ({ stats: { wins: 0, losses: 0, draws: 0 }, upgrades: { reach: 0, strength: 0, jump: 0 }, upgradePoints: 0, ...f, })); }
+    function saveFighters(fighters) { localStorage.setItem('fighters', JSON.stringify(fighters)); }
+    function getDiceBearUrl(options) { return `https://api.dicebear.com/9.x/croodles/svg?${new URLSearchParams(options).toString()}`; }
+    function loadImage(url) { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error(`Image load fail: ${url}`)); img.src = url; }); }
+
+    class Player {
+        constructor({ position, keys, headImage, fighterData }) {
+            this.fighterData = fighterData; this.keys = keys; this.headImage = headImage;
+            this.position = position; this.direction = position.x < 500 ? 1 : -1;
+            const upgrades = fighterData.upgrades;
+            this.jumpHeight = BASE_JUMP * (1 + upgrades.jump / 5);
+            this.strength = BASE_STRENGTH * (1 + upgrades.strength / 5);
+            this.reach = BASE_REACH * (1 + upgrades.reach / 5);
+            this.velocity = { x: 0, y: 0 }; this.width = 60; this.height = 150;
+            this.isAttacking = false; this.attackType = null; this.attackCooldown = 0;
+            this.attackBox = { offset: { x: 60, y: 30 }, height: 50 };
+            this.health = 100; this.specialMeter = 0; this.aiActionCooldown = 60;
+        }
+        draw() {
+            c.save();
+            c.translate(this.position.x + this.width / 2, this.position.y + this.height / 2);
+            c.scale(this.direction, 1);
+            c.translate(-(this.position.x + this.width / 2), -(this.position.y + this.height / 2));
+            c.strokeStyle = document.body.classList.contains('light-mode') ? '#333' : '#FFF';
+            c.lineWidth = 5; c.lineCap = 'round';
+            const torsoX = this.position.x + 30, torsoYStart = this.position.y + 40, torsoYEnd = this.position.y + 90;
+            c.beginPath(); c.moveTo(torsoX, torsoYStart); c.lineTo(torsoX, torsoYEnd); c.stroke();
+            let leg1X = torsoX - 15, leg2X = torsoX + 15, legY = this.position.y + 140;
+            if (this.isAttacking && this.attackType === 'kick') { leg2X = torsoX + this.reach * 0.7; }
+            c.beginPath(); c.moveTo(torsoX, torsoYEnd); c.lineTo(leg1X, legY); c.moveTo(torsoX, torsoYEnd); c.lineTo(leg2X, legY); c.stroke();
+            let arm1X = this.position.x + 50, arm1Y = this.position.y + 70;
+            if (this.isAttacking && (this.attackType === 'punch' || this.attackType === 'special')) { arm1X = this.position.x + 30 + this.reach; }
+            c.beginPath(); c.moveTo(torsoX, torsoYStart + 20); c.lineTo(arm1X, arm1Y); c.moveTo(torsoX, torsoYStart + 20); c.lineTo(this.position.x + 10, this.position.y + 60); c.stroke();
+            if (this.headImage && this.headImage.complete) c.drawImage(this.headImage, this.position.x - 5, this.position.y - 10, 70, 70);
+            c.restore();
+        }
+        update() {
+            this.draw();
+            if (this.attackCooldown > 0) this.attackCooldown--;
+            this.position.x += this.velocity.x; this.position.y += this.velocity.y;
+            const groundPosition = canvas.height - this.height - 10;
+            if (this.position.y > groundPosition) { this.velocity.y = 0; this.position.y = groundPosition; }
+            else { this.velocity.y += 0.7; }
+            if (this.position.x <= 0) this.position.x = 0;
+            if (this.position.x + this.width >= canvas.width) this.position.x = canvas.width - this.width;
+        }
+        attack(type) {
+            if (this.attackCooldown > 0) return;
+            this.isAttacking = true; this.attackType = type; this.attackCooldown = 30;
+            if (type === 'special') { if (this.specialMeter < 100) { this.isAttacking = false; return; } this.specialMeter = 0; this.attackCooldown = 60; }
+            setTimeout(() => { this.isAttacking = false; }, 200);
+        }
+        takeDamage(amount) { this.health = Math.max(0, this.health - amount); }
+    }
+    
+    function updateAI(ai, target) { /* AI Logic is unchanged */ }
+    
+    function checkHit(attacker, receiver) {
+        const attackBox = {
+            x: attacker.position.x + (attacker.direction === 1 ? attacker.attackBox.offset.x : -attacker.attackBox.offset.x - attacker.reach + attacker.width),
+            y: attacker.position.y + attacker.attackBox.offset.y,
+            width: attacker.reach,
+            height: attacker.attackBox.height
+        };
+        const receiverBox = { x: receiver.position.x, y: receiver.position.y, width: receiver.width, height: receiver.height };
+        return (
+            attackBox.x < receiverBox.x + receiverBox.width &&
+            attackBox.x + attackBox.width > receiverBox.x &&
+            attackBox.y < receiverBox.y + receiverBox.height &&
+            attackBox.y + attackBox.height > receiverBox.y
+        );
+    }
+    
+    function determineWinner() {
+        p1HealthBar.style.width = player.health + '%';
+        p2HealthBar.style.width = enemy.health + '%';
+        window.cancelAnimationFrame(animationId); clearTimeout(timerId);
+        const fighters = getFighters();
+        const p1Data = fighters.find(f => f.name === player.fighterData.name);
+        const p2Data = fighters.find(f => f.name === enemy.fighterData.name);
+        let msg = '';
+        if (player.health === enemy.health) { msg = 'Tie'; if(p1Data) p1Data.stats.draws++; if(p2Data) p2Data.stats.draws++; }
+        else if (player.health > enemy.health) { msg = `${p1Data.name} Wins!`; if(p1Data) { p1Data.stats.wins++; p1Data.upgradePoints++; } if(p2Data) p2Data.stats.losses++; }
+        else { msg = `${p2Data.name} Wins!`; if(p2Data) { p2Data.stats.wins++; p2Data.upgradePoints++; } if(p1Data) p1Data.stats.losses++; }
+        saveFighters(fighters);
+        document.getElementById('game-message').textContent = msg;
+        document.getElementById('game-message-container').style.display = 'flex';
+    }
+
+    function decreaseTimer(timer) { if (timer >= 0) { document.querySelector('#timer').innerHTML = timer; timerId = setTimeout(() => decreaseTimer(timer - 1), 1000); } else { determineWinner(); } }
+        
+    function animate() {
+        animationId = window.requestAnimationFrame(animate);
+        c.clearRect(0, 0, canvas.width, canvas.height);
+        c.fillStyle = document.body.classList.contains('light-mode') ? '#8d6e63' : '#6f5e5a';
+        c.fillRect(0, canvas.height - 10, canvas.width, 10);
+
+        if (player.position.x < enemy.position.x) player.direction = 1; else player.direction = -1;
+        if (enemy.position.x < player.position.x) enemy.direction = 1; else enemy.direction = -1;
+        
+        if (isAiOpponent) updateAI(enemy, player);
+        player.update(); enemy.update();
+        player.velocity.x = 0; if (keys.a.pressed) player.velocity.x = -5; else if (keys.d.pressed) player.velocity.x = 5;
+        if (!isAiOpponent) { enemy.velocity.x = 0; if (keys.ArrowLeft.pressed) enemy.velocity.x = -5; else if (keys.ArrowRight.pressed) enemy.velocity.x = 5; }
+        
+        if (player.isAttacking && checkHit(player, enemy)) {
+            const damage = player.strength * (player.attackType === 'kick' ? 1.5 : 1) * (player.attackType === 'special' ? 3 : 1);
+            enemy.takeDamage(damage);
+            player.specialMeter = Math.min(100, player.specialMeter + 8);
+            player.isAttacking = false;
+        }
+        if (enemy.isAttacking && checkHit(enemy, player)) {
+            const damage = enemy.strength * (enemy.attackType === 'kick' ? 1.5 : 1) * (enemy.attackType === 'special' ? 3 : 1);
+            player.takeDamage(damage);
+            enemy.specialMeter = Math.min(100, enemy.specialMeter + 8);
+            enemy.isAttacking = false;
+        }
+        
+        p1HealthBar.style.width = player.health + '%';
+        p2HealthBar.style.width = enemy.health + '%';
+        p1SpecialBar.style.width = player.specialMeter + '%';
+        p2SpecialBar.style.width = enemy.specialMeter + '%';
+        p1SpecialBar.classList.toggle('full', player.specialMeter >= 100);
+        p2SpecialBar.classList.toggle('full', enemy.specialMeter >= 100);
+        if (enemy.health <= 0 || player.health <= 0) determineWinner();
+    }
+    
+    function showScreen(screenId) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(screenId)?.classList.add('active'); }
+    function populateUpgradePanel(panelId, fighterName) { const fighters = getFighters(); const fighter = fighters.find(f => f.name === fighterName); if(!fighter) return; const panel = document.getElementById(panelId); const canUpgrade = fighter.upgradePoints > 0; panel.innerHTML = `<img src="${getDiceBearUrl(fighter.avatarOptions)}" alt="${fighter.name}"><h3>${fighter.name}</h3><p><strong>Record:</strong> ${fighter.stats.wins}W - ${fighter.stats.losses}L - ${fighter.stats.draws}D</p><p><strong>Upgrade Points:</strong> <span id="${panelId}-points">${fighter.upgradePoints}</span></p><hr>` + Object.keys(fighter.upgrades).map(stat => `<div class="stat-line"><span>${stat.charAt(0).toUpperCase() + stat.slice(1)}</span><div class="upgrade-bar" id="${panelId}-${stat}-bar"></div><button class="upgrade-btn" data-stat="${stat}" ${!canUpgrade || fighter.upgrades[stat] >= 5 ? 'disabled' : ''}>+</button></div>`).join(''); Object.keys(fighter.upgrades).forEach(stat => { const bar = document.getElementById(`${panelId}-${stat}-bar`); bar.innerHTML = Array(5).fill(0).map((_, i) => `<div class="upgrade-tick ${i < fighter.upgrades[stat] ? 'filled' : ''}"></div>`).join(''); }); panel.querySelectorAll('.upgrade-btn').forEach(btn => btn.addEventListener('click', () => handleUpgrade(fighter.name, btn.dataset.stat))); }
+    function handleUpgrade(fighterName, stat) { const fighters = getFighters(); const fighter = fighters.find(f => f.name === fighterName); if (fighter.upgradePoints > 0 && fighter.upgrades[stat] < 5) { fighter.upgradePoints--; fighter.upgrades[stat]++; saveFighters(fighters); populateUpgradePanel('upgrade-p1', player.fighterData.name); populateUpgradePanel('upgrade-p2', enemy.fighterData.name); } }
+    async function startMatch(p1Name, p2Name) {
+        const fighters = getFighters();
+        const p1Data = { ...fighters.find(f => f.name === p1Name) };
+        const p2Data = { ...fighters.find(f => f.name === p2Name) };
+        sessionStorage.setItem('last_p1', p1Name); sessionStorage.setItem('last_p2', p2Name);
+        try {
+            const [p1Head, p2Head] = await Promise.all([loadImage(getDiceBearUrl(p1Data.avatarOptions)), loadImage(getDiceBearUrl(p2Data.avatarOptions))]);
+            showScreen('game-container');
+            player = new Player({ position: { x: 100, y: 100 }, keys: { up: 'w', left: 'a', right: 'd', punch: 'f', kick: 'g', special: 'r' }, headImage: p1Head, fighterData: p1Data });
+            enemy = new Player({ position: { x: canvas.width - 160, y: 100 }, keys: { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight', punch: 'l', kick: ';', special: '[' }, headImage: p2Head, fighterData: p2Data });
+            document.getElementById('game-message-container').style.display = 'none';
+            decreaseTimer(60);
+            animate();
+        } catch (error) { console.error(error); alert("Failed to load images. Check internet connection."); showScreen('setup-screen'); }
+    }
+    
+    function init() {
+        p1HealthBar = document.getElementById('p1-health-bar'); p2HealthBar = document.getElementById('p2-health-bar');
+        p1SpecialBar = document.getElementById('p1-special-bar'); p2SpecialBar = document.getElementById('p2-special-bar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const creatorElements = { name: document.getElementById('fighter-name'), seed: document.getElementById('seed'), face: document.getElementById('face'), nose: document.getElementById('nose'), mouth: document.getElementById('mouth') };
+        
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('light-mode');
+                themeToggle.checked = true;
+            } else {
+                document.body.classList.remove('light-mode');
+                themeToggle.checked = false;
+            }
+        }
+        themeToggle.addEventListener('change', () => {
+            const theme = themeToggle.checked ? 'light' : 'dark';
+            localStorage.setItem('theme', theme);
+            applyTheme(theme);
+        });
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        applyTheme(savedTheme);
+
+        function getCreatorOptions() { return { seed: creatorElements.seed.value || 'default', face: [creatorElements.face.value], nose: [creatorElements.nose.value], mouth: [creatorElements.mouth.value] }; }
+        function updateCreatorPreview() { document.getElementById('avatar-preview').src = getDiceBearUrl(getCreatorOptions()); }
+        Object.values(creatorElements).forEach(el => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', updateCreatorPreview));
+        document.getElementById('random-seed-btn').addEventListener('click', () => { creatorElements.seed.value = Math.random().toString(36).substring(2, 10); updateCreatorPreview(); });
+        function saveFighter() { const name = creatorElements.name.value; if (!name) return alert('Please enter a name.'); const fighters = getFighters(); if (fighters.some(f => f.name === name) && !confirm(`Overwrite "${name}"?`)) return; const newFighter = { name, avatarOptions: getCreatorOptions() }; const existingIndex = fighters.findIndex(f => f.name === name); const oldFighterData = existingIndex > -1 ? fighters[existingIndex] : {}; fighters[existingIndex > -1 ? existingIndex : fighters.length] = { ...oldFighterData, ...newFighter, stats: oldFighterData.stats || {wins:0,losses:0,draws:0}, upgrades: oldFighterData.upgrades || {reach:0,strength:0,jump:0}, upgradePoints: oldFighterData.upgradePoints || 0 }; saveFighters(fighters); populateFighterLists(); creatorElements.name.value = ''; creatorElements.seed.value = ''; }
+        function deleteFighter() { const select = document.getElementById('p1-select'); const fighterName = select.value; if (!fighterName || !confirm(`Delete "${fighterName}"? This is permanent.`)) return; saveFighters(getFighters().filter(f => f.name !== fighterName)); populateFighterLists(); }
+        function populateFighterLists() { const fighters = getFighters(); ['p1-select', 'p2-select'].forEach(id => { const select = document.getElementById(id); const currentValue = select.value; select.innerHTML = ''; fighters.forEach(fighter => { const option = document.createElement('option'); option.value = fighter.name; option.textContent = `${fighter.name} (${fighter.stats.wins}W/${fighter.stats.losses}L)`; option.dataset.avatarOptions = JSON.stringify(fighter.avatarOptions); select.appendChild(option); }); select.value = currentValue; updateSelectorPreview(select); }); }
+        function updateSelectorPreview(select) { const preview = document.getElementById(select.id + '-preview'); const option = select.options[select.selectedIndex]; preview.src = (option && option.dataset.avatarOptions) ? getDiceBearUrl(JSON.parse(option.dataset.avatarOptions)) : ''; }
+        ['p1-select', 'p2-select'].forEach(id => document.getElementById(id).addEventListener('change', e => updateSelectorPreview(e.target)));
+        document.getElementById('save-fighter-btn').addEventListener('click', saveFighter);
+        document.getElementById('delete-fighter-btn').addEventListener('click', deleteFighter);
+        document.getElementById('start-game-btn').addEventListener('click', () => { const p1Name = document.getElementById('p1-select').value; const p2Name = document.getElementById('p2-select').value; if (!p1Name || !p2Name) { alert('Select both fighters!'); return; } isAiOpponent = document.getElementById('game-mode').value === 'ai'; startMatch(p1Name, p2Name); });
+        document.getElementById('rematch-yes-btn').addEventListener('click', () => { populateUpgradePanel('upgrade-p1', player.fighterData.name); populateUpgradePanel('upgrade-p2', enemy.fighterData.name); showScreen('upgrade-screen'); });
+        document.getElementById('rematch-no-btn').addEventListener('click', () => { populateFighterLists(); showScreen('setup-screen'); });
+        document.getElementById('start-rematch-btn').addEventListener('click', () => startMatch(player.fighterData.name, enemy.fighterData.name));
+        window.addEventListener('keydown', e => { if (!player) return; const key = e.key.toLowerCase(); switch (key) { case 'a': keys.a.pressed = true; break; case 'd': keys.d.pressed = true; break; case 'w': if (player.position.y >= canvas.height - player.height - 11) player.velocity.y = player.jumpHeight; break; case 'f': player.attack('punch'); break; case 'g': player.attack('kick'); break; case 'r': player.attack('special'); break; } if(isAiOpponent) return; switch (e.key) { case 'ArrowLeft': keys.ArrowLeft.pressed = true; break; case 'ArrowRight': keys.ArrowRight.pressed = true; break; case 'ArrowUp': if (enemy.position.y >= canvas.height - enemy.height - 11) enemy.velocity.y = enemy.jumpHeight; break; case 'l': enemy.attack('punch'); break; case ';': enemy.attack('kick'); break; case '[': enemy.attack('special'); break; } });
+        window.addEventListener('keyup', e => { if (!player) return; const key = e.key.toLowerCase(); switch (key) { case 'a': keys.a.pressed = false; break; case 'd': keys.d.pressed = false; break; } if(isAiOpponent) return; switch (e.key) { case 'ArrowLeft': keys.ArrowLeft.pressed = false; break; case 'ArrowRight': keys.ArrowRight.pressed = false; break; } });
+        populateFighterLists(); const lastP1 = sessionStorage.getItem('last_p1'); if (lastP1) document.getElementById('p1-select').value = lastP1; const lastP2 = sessionStorage.getItem('last_p2'); if (lastP2) document.getElementById('p2-select').value = lastP2;
+        updateCreatorPreview(); ['p1-select', 'p2-select'].forEach(id => updateSelectorPreview(document.getElementById(id)));
+        showScreen('setup-screen');
+    }
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
