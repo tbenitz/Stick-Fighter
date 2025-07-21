@@ -212,30 +212,98 @@
             this.reach = BASE_REACH * (1 + upgrades.reach / 5);
             this.velocity = { x: 0, y: 0 }; this.width = 60; this.height = 150;
             this.isAttacking = false; this.attackType = null; this.attackCooldown = 0;
+            this.hasLandedHit = false;
             this.attackBox = { offset: { x: 60, y: 30 }, height: 50 };
             this.health = 100; this.specialMeter = 0; this.aiActionCooldown = 60;
         }
+        
         draw() {
             c.save();
             c.translate(this.position.x + this.width / 2, this.position.y + this.height / 2);
             c.scale(this.direction, 1);
             c.translate(-(this.position.x + this.width / 2), -(this.position.y + this.height / 2));
+            
             c.strokeStyle = document.body.classList.contains('light-mode') ? '#333' : '#FFF';
-            c.lineWidth = 5; c.lineCap = 'round';
+            c.fillStyle = c.strokeStyle;
+            c.lineWidth = 8;
+            c.lineCap = 'round';
+
             const torsoX = this.position.x + 30, torsoYStart = this.position.y + 40, torsoYEnd = this.position.y + 90;
-            c.beginPath(); c.moveTo(torsoX, torsoYStart); c.lineTo(torsoX, torsoYEnd); c.stroke();
-            let leg1X = torsoX - 15, leg2X = torsoX + 15, legY = this.position.y + 140;
-            if (this.isAttacking && this.attackType === 'kick') { leg2X = torsoX + this.reach * 0.7; }
-            c.beginPath(); c.moveTo(torsoX, torsoYEnd); c.lineTo(leg1X, legY); c.moveTo(torsoX, torsoYEnd); c.lineTo(leg2X, legY); c.stroke();
-            let arm1X = this.position.x + 50, arm1Y = this.position.y + 70;
-            if (this.isAttacking && (this.attackType === 'punch' || this.attackType === 'special')) { arm1X = this.position.x + 30 + this.reach; }
-            c.beginPath(); c.moveTo(torsoX, torsoYStart + 20); c.lineTo(arm1X, arm1Y); c.moveTo(torsoX, torsoYStart + 20); c.lineTo(this.position.x + 10, this.position.y + 60); c.stroke();
+            const shoulder = { x: torsoX, y: torsoYStart + 10 };
+            const hip = { x: torsoX, y: torsoYEnd };
+
+            // Torso
+            c.beginPath();
+            c.moveTo(torsoX, torsoYStart);
+            c.lineTo(torsoX, torsoYEnd);
+            c.stroke();
+            
+            // --- LIMBS ---
+            const attackDuration = 30; // Base duration for punch/kick
+            const specialDuration = 60; // Duration for special
+            let progress = 0;
+            if (this.isAttacking) {
+                const duration = this.attackType === 'special' ? specialDuration : attackDuration;
+                progress = Math.max(0, (duration - this.attackCooldown) / duration);
+            }
+            
+            // Animation Parameters
+            let backArm = { elbow: {x: shoulder.x-10, y: shoulder.y+20}, hand: {x: shoulder.x-5, y: shoulder.y+40} };
+            let frontArm = { elbow: {x: shoulder.x+10, y: shoulder.y+20}, hand: {x: shoulder.x+5, y: shoulder.y+40} };
+            let backLeg = { knee: {x: hip.x-10, y: hip.y+30}, foot: {x: hip.x-15, y: hip.y+60} };
+            let frontLeg = { knee: {x: hip.x+10, y: hip.y+30}, foot: {x: hip.x+15, y: hip.y+60} };
+
+            if (this.isAttacking) {
+                const peakProgress = Math.sin(progress * Math.PI); // Creates a 0 -> 1 -> 0 arc for smooth motion
+                if(this.attackType === 'punch' || this.attackType === 'special') {
+                    // Fist moves straight out, elbow stays below the shoulder for a natural look
+                    frontArm.elbow = { x: shoulder.x + (this.reach * 0.5 * progress), y: shoulder.y + 20 };
+                    frontArm.hand = { x: shoulder.x + (this.reach * progress), y: shoulder.y };
+                }
+                if(this.attackType === 'kick') {
+                    frontLeg.knee = { x: hip.x + (this.reach * 0.4 * progress), y: hip.y + 20 - (30 * peakProgress) };
+                    frontLeg.foot = { x: hip.x + (this.reach * 0.7 * progress), y: hip.y + 40 };
+                }
+            } else if (Math.abs(this.velocity.x) > 0) { // Walking animation
+                const walkCycle = Math.sin(Date.now() / 150);
+                frontArm.hand.x += walkCycle * 10;
+                backArm.hand.x -= walkCycle * 10;
+                frontLeg.foot.x += walkCycle * 15;
+                backLeg.foot.x -= walkCycle * 15;
+            }
+            
+            // Draw Back Limbs
+            c.beginPath(); c.moveTo(shoulder.x, shoulder.y); c.lineTo(backArm.elbow.x, backArm.elbow.y); c.lineTo(backArm.hand.x, backArm.hand.y); c.stroke();
+            c.beginPath(); c.moveTo(hip.x, hip.y); c.lineTo(backLeg.knee.x, backLeg.knee.y); c.lineTo(backLeg.foot.x, backLeg.foot.y); c.stroke();
+
+            // Draw Front Limbs
+            c.beginPath(); c.moveTo(shoulder.x, shoulder.y); c.lineTo(frontArm.elbow.x, frontArm.elbow.y); c.lineTo(frontArm.hand.x, frontArm.hand.y); c.stroke();
+            c.beginPath(); c.moveTo(hip.x, hip.y); c.lineTo(frontLeg.knee.x, frontLeg.knee.y); c.lineTo(frontLeg.foot.x, frontLeg.foot.y); c.stroke();
+
+            // Draw Fists/Feet for attacks
+            if (this.isAttacking) {
+                c.beginPath();
+                if(this.attackType === 'punch' || this.attackType === 'special') {
+                    c.arc(frontArm.hand.x, frontArm.hand.y, 12, 0, Math.PI * 2);
+                }
+                if(this.attackType === 'kick') {
+                    c.arc(frontLeg.foot.x, frontLeg.foot.y, 12, 0, Math.PI * 2);
+                }
+                c.fill();
+            }
+
+            // Head
             if (this.headImage && this.headImage.complete) c.drawImage(this.headImage, this.position.x - 5, this.position.y - 10, 70, 70);
             c.restore();
         }
+
         update() {
             this.draw();
-            if (this.attackCooldown > 0) this.attackCooldown--;
+            if (this.attackCooldown > 0) {
+                this.attackCooldown--;
+            } else {
+                this.isAttacking = false;
+            }
             this.position.x += this.velocity.x; this.position.y += this.velocity.y;
             const groundPosition = canvas.height - this.height - 10;
             if (this.position.y > groundPosition) { this.velocity.y = 0; this.position.y = groundPosition; }
@@ -245,14 +313,50 @@
         }
         attack(type) {
             if (this.attackCooldown > 0) return;
-            this.isAttacking = true; this.attackType = type; this.attackCooldown = 30;
-            if (type === 'special') { if (this.specialMeter < 100) { this.isAttacking = false; return; } this.specialMeter = 0; this.attackCooldown = 60; }
-            setTimeout(() => { this.isAttacking = false; }, 200);
+            this.isAttacking = true;
+            this.attackType = type;
+            this.hasLandedHit = false; // Reset hit flag for the new attack
+            this.attackCooldown = type === 'special' ? 60 : 30;
+            if (type === 'special') { if (this.specialMeter < 100) { this.isAttacking = false; return; } this.specialMeter = 0; }
         }
         takeDamage(amount) { this.health = Math.max(0, this.health - amount); }
     }
     
-    function updateAI(ai, target) { /* AI Logic is unchanged */ }
+    function updateAI(ai, target) {
+        ai.velocity.x = 0; // AI controls its own velocity
+        const distance = Math.abs(ai.position.x - target.position.x);
+        const directionToTarget = (target.position.x > ai.position.x) ? 1 : -1;
+
+        if (ai.aiActionCooldown > 0) {
+            ai.aiActionCooldown--;
+            return;
+        }
+
+        // --- AI Decision Making ---
+        if (ai.specialMeter >= 100 && distance < ai.reach * 1.5) {
+            ai.attack('special');
+            ai.aiActionCooldown = 120;
+            return;
+        }
+
+        if (distance < ai.reach * 0.8) {
+            const action = Math.random();
+            if (action < 0.45) {
+                ai.attack('punch');
+            } else if (action < 0.9) {
+                ai.attack('kick');
+            } else {
+                if (ai.position.y >= canvas.height - ai.height - 11) {
+                    ai.velocity.y = ai.jumpHeight;
+                }
+            }
+            ai.aiActionCooldown = Math.floor(Math.random() * 40) + 30;
+        }
+        else {
+            ai.velocity.x = 5 * directionToTarget;
+            ai.aiActionCooldown = 10;
+        }
+    }
     
     function checkHit(attacker, receiver) {
         const attackBox = {
@@ -297,30 +401,46 @@
         if (player.position.x < enemy.position.x) player.direction = 1; else player.direction = -1;
         if (enemy.position.x < player.position.x) enemy.direction = 1; else enemy.direction = -1;
         
-        if (isAiOpponent) updateAI(enemy, player);
-        player.update(); enemy.update();
-        player.velocity.x = 0; if (keys.a.pressed) player.velocity.x = -5; else if (keys.d.pressed) player.velocity.x = 5;
-        if (!isAiOpponent) { enemy.velocity.x = 0; if (keys.ArrowLeft.pressed) enemy.velocity.x = -5; else if (keys.ArrowRight.pressed) enemy.velocity.x = 5; }
+        // --- Player 1 Input ---
+        player.velocity.x = 0;
+        if (keys.a.pressed) player.velocity.x -= 5;
+        if (keys.d.pressed) player.velocity.x += 5;
+
+        // --- Player 2 / AI Input ---
+        if (isAiOpponent) {
+            updateAI(enemy, player);
+        } else {
+            enemy.velocity.x = 0;
+            if (keys.ArrowLeft.pressed) enemy.velocity.x -= 5;
+            if (keys.ArrowRight.pressed) enemy.velocity.x += 5;
+        }
+
+        // --- Update states and draw ---
+        player.update();
+        enemy.update();
         
-        if (player.isAttacking && checkHit(player, enemy)) {
+        // --- Hit Detection ---
+        if (player.isAttacking && !player.hasLandedHit && checkHit(player, enemy)) {
             const damage = player.strength * (player.attackType === 'kick' ? 1.5 : 1) * (player.attackType === 'special' ? 3 : 1);
             enemy.takeDamage(damage);
             player.specialMeter = Math.min(100, player.specialMeter + 8);
-            player.isAttacking = false;
+            player.hasLandedHit = true;
         }
-        if (enemy.isAttacking && checkHit(enemy, player)) {
+        if (enemy.isAttacking && !enemy.hasLandedHit && checkHit(enemy, player)) {
             const damage = enemy.strength * (enemy.attackType === 'kick' ? 1.5 : 1) * (enemy.attackType === 'special' ? 3 : 1);
             player.takeDamage(damage);
             enemy.specialMeter = Math.min(100, enemy.specialMeter + 8);
-            enemy.isAttacking = false;
+            enemy.hasLandedHit = true;
         }
         
+        // --- UI Update ---
         p1HealthBar.style.width = player.health + '%';
         p2HealthBar.style.width = enemy.health + '%';
         p1SpecialBar.style.width = player.specialMeter + '%';
         p2SpecialBar.style.width = enemy.specialMeter + '%';
         p1SpecialBar.classList.toggle('full', player.specialMeter >= 100);
         p2SpecialBar.classList.toggle('full', enemy.specialMeter >= 100);
+        
         if (enemy.health <= 0 || player.health <= 0) determineWinner();
     }
     
